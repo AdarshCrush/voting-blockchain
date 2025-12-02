@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id            String   @id @default(cuid())
+  walletAddress String   @unique
+  email         String   @unique
+  password      String   // Add this line
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  elections Election[]
+}
+
+model Election {
+  id        String   @id @default(cuid())
+  name      String
+  year      Int
+  description String?
+  startTime DateTime?
+  endTime   DateTime?
+  status    String   @default("PENDING")
+  adminId   String
+  admin     Admin    @relation(fields: [adminId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  parties   Party[]
+  voters    Voter[]
+  votes     Vote[]
+  
+  @@unique([name, year])
+}
+
+model Party {
+  id          String   @id @default(cuid())
+  name        String
+  symbol      String?
+  electionId  String
+  election    Election @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  candidates Candidate[]
+  votes      Vote[]
+}
+
+model Candidate {
+  id        String   @id @default(cuid())
+  name      String
+  position  String?
+  partyId   String
+  party     Party    @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  votes     Vote[]
+}
+
+model Voter {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  aadharNumber  String   @unique
+  voterId       String   @unique
+  walletAddress String   @unique
+  electionId    String
+  election      Election @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  hasVoted      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  vote          Vote?
+}
+
+model Vote {
+  id          String   @id @default(cuid())
+  voterId     String   @unique
+  voter       Voter    @relation(fields: [voterId], references: [id], onDelete: Cascade)
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+  partyId     String
+  party       Party    @relation(fields: [partyId], references: [id])
+  electionId  String
+  election    Election @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  txHash      String   @unique
+  createdAt   DateTime @default(now())
+}
