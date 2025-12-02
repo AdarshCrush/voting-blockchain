@@ -6,10 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { User, LogOut, Vote, Calendar, Clock, Users, Shield, ExternalLink, Loader2 } from "lucide-react"
+import { User, LogOut, Vote, Calendar, Clock, Users, Shield, ExternalLink, Loader2, CheckCircle2 } from "lucide-react"
 import VoteConfirmationDialog from "@/components/VoteConfirmationDialog"
 import { connectMetaMask } from "@/utils/blockchain"
- import Sidebar from "@/components/sidebar"
+import Sidebar from "@/components/sidebar"
 import { BarChart3, CheckCircle } from "lucide-react"
 
 const voterMenuItems = [
@@ -47,10 +47,12 @@ interface Candidate {
   id: string
   name: string
   position: string
+  imageUrl: string | null
   party: {
     id: string
     name: string
-    symbol: string
+    symbol: string | null
+    iconUrl: string | null
   }
 }
 
@@ -87,6 +89,15 @@ export default function VoterDashboard() {
       if (!response.ok) throw new Error("Failed to fetch voter data")
       const data = await response.json()
       
+      // Debug: Log the data to see what we're getting
+      console.log("Voter data:", data.voter)
+      console.log("Election data candidates:", data.electionData?.candidates)
+      if (data.electionData?.candidates?.length > 0) {
+        console.log("First candidate:", data.electionData.candidates[0])
+        console.log("First candidate imageUrl:", data.electionData.candidates[0].imageUrl)
+        console.log("First candidate party iconUrl:", data.electionData.candidates[0].party.iconUrl)
+      }
+      
       setVoter(data.voter)
       setElectionData(data.electionData)
     } catch (error) {
@@ -105,78 +116,78 @@ export default function VoterDashboard() {
     setShowConfirmation(true)
   }
 
-const handleConfirmVote = async () => {
-  if (!selectedCandidate || !voter) return
+  const handleConfirmVote = async () => {
+    if (!selectedCandidate || !voter) return
 
-  setShowConfirmation(false)
-  setIsVoting(true)
-  setError("")
-  setSuccess("")
-  setTransactionHash("")
+    setShowConfirmation(false)
+    setIsVoting(true)
+    setError("")
+    setSuccess("")
+    setTransactionHash("")
 
-  try {
-    // Step 1: Connect to MetaMask and verify wallet
-    setIsConfirming(true)
-    const walletAddress = await connectMetaMask()
-    
-    // Verify that connected wallet matches voter's wallet
-    if (walletAddress.toLowerCase() !== voter.walletAddress.toLowerCase()) {
-      throw new Error(`Please connect with your registered wallet: ${voter.walletAddress}`)
+    try {
+      // Step 1: Connect to MetaMask and verify wallet
+      setIsConfirming(true)
+      const walletAddress = await connectMetaMask()
+      
+      // Verify that connected wallet matches voter's wallet
+      if (walletAddress.toLowerCase() !== voter.walletAddress.toLowerCase()) {
+        throw new Error(`Please connect with your registered wallet: ${voter.walletAddress}`)
+      }
+
+      // Step 2: Get selected candidate details
+      const candidate = electionData?.candidates.find(c => c.id === selectedCandidate)
+      if (!candidate) {
+        throw new Error("Selected candidate not found")
+      }
+
+      // Step 3: Send transaction to blockchain
+      console.log('Sending blockchain transaction...')
+      const txHash = await sendVoteTransaction(
+        voter.voterId,
+        selectedCandidate,
+        voter.election.id
+      )
+
+      console.log('Transaction completed with hash:', txHash)
+      setTransactionHash(txHash)
+
+      // Step 4: Send vote to backend API
+      console.log('Sending vote to backend API...')
+      const response = await fetch("/api/voter/vote", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          candidateId: selectedCandidate,
+          electionId: voter.election.id
+        }),
+        credentials: 'include'
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to cast vote")
+      }
+
+      // Step 5: Set success message
+      setSuccess("Vote cast successfully! Your vote has been recorded on the blockchain.")
+      
+      // Refresh voter data to update voting status
+      setTimeout(() => {
+        fetchVoterData()
+      }, 2000)
+
+    } catch (err: any) {
+      setError(err.message || "An error occurred while casting your vote. Please try again.")
+      console.error("Voting error:", err)
+    } finally {
+      setIsVoting(false)
+      setIsConfirming(false)
     }
-
-    // Step 2: Get selected candidate details
-    const candidate = electionData?.candidates.find(c => c.id === selectedCandidate)
-    if (!candidate) {
-      throw new Error("Selected candidate not found")
-    }
-
-    // Step 3: Send transaction to blockchain - THIS WILL TRIGGER METAMASK CONFIRMATION
-    console.log('Sending blockchain transaction...')
-    const txHash = await sendVoteTransaction(
-      voter.voterId,
-      selectedCandidate,
-      voter.election.id
-    )
-
-    console.log('Transaction completed with hash:', txHash)
-    setTransactionHash(txHash)
-
-    // Step 4: Only after MetaMask confirmation, send vote to backend API
-    console.log('Sending vote to backend API...')
-    const response = await fetch("/api/voter/vote", {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        candidateId: selectedCandidate,
-        electionId: voter.election.id
-      }),
-      credentials: 'include'
-    })
-
-    const result = await response.json()
-
-    if (!response.ok) {
-      throw new Error(result.error || "Failed to cast vote")
-    }
-
-    // Step 5: Set success message
-    setSuccess("Vote cast successfully! Your vote has been recorded on the blockchain.")
-    
-    // Refresh voter data to update voting status
-    setTimeout(() => {
-      fetchVoterData()
-    }, 2000)
-
-  } catch (err: any) {
-    setError(err.message || "An error occurred while casting your vote. Please try again.")
-    console.error("Voting error:", err)
-  } finally {
-    setIsVoting(false)
-    setIsConfirming(false)
   }
-}
 
   const handleLogout = async () => {
     try {
@@ -239,9 +250,26 @@ const handleConfirmVote = async () => {
 
   const getEtherscanUrl = () => {
     if (!transactionHash) return "#"
-    // For demo purposes, we'll use a placeholder URL
-    // In production, you would use your actual blockchain explorer URL
     return `https://etherscan.io/tx/${transactionHash}`
+  }
+
+  // Test function to check image loading
+  const testImageUrl = (url: string | null): string => {
+    if (!url) return "";
+    
+    // If it's a Cloudinary URL, make sure it's properly formatted
+    if (url.includes('cloudinary')) {
+      // Ensure it starts with https
+      if (!url.startsWith('https://')) {
+        url = 'https://' + url.replace(/^https?:\/\//, '');
+      }
+      // Add default transformation if missing
+      if (!url.includes('/upload/')) {
+        url = url.replace('cloudinary.com/', 'cloudinary.com/upload/');
+      }
+    }
+    
+    return url;
   }
 
   if (isLoading) {
@@ -270,387 +298,459 @@ const handleConfirmVote = async () => {
   }
 
   return (
-      <div className="flex">
-          <Sidebar items={voterMenuItems} userRole="voter" userName="Voter Account" onLogout={handleLogout} />
-          <div className="flex-1 md:ml-0">
-             <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <User className="w-8 h-8 text-primary" />
-              <h1 className="text-2xl font-bold text-foreground">Voter Dashboard</h1>
-            </div>
-            <Button onClick={handleLogout} variant="outline" size="sm">
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <div className="container mx-auto px-6 py-8">
-        {error && (
-          <Alert className="bg-destructive/10 border-destructive/20 mb-6">
-            <AlertDescription className="text-destructive">{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {success && (
-          <Alert className="bg-green-500/10 border-green-500/20 mb-6">
-            <AlertDescription className="text-green-700">
-              <div className="flex flex-col gap-2">
-                <span>{success}</span>
-                {transactionHash && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">Transaction ID:</span>
-                    <code className="text-xs bg-muted px-2 py-1 rounded">
-                      {transactionHash.slice(0, 16)}...
-                    </code>
-                    <a 
-                      href={getEtherscanUrl()} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                      View
-                    </a>
-                  </div>
-                )}
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column - Voter Info and Election Details */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Voter Information */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Voter Information</CardTitle>
-                <CardDescription>Your voter profile details</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Email</p>
-                    <p className="text-foreground">{voter.email}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Voter ID</p>
-                    <p className="text-foreground font-mono">{voter.voterId}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Wallet Address</p>
-                    <p className="text-foreground font-mono text-sm">
-                      {voter.walletAddress.slice(0, 8)}...{voter.walletAddress.slice(-6)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Voting Status</p>
-                    <Badge 
-                      className={voter.hasVoted ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}
-                    >
-                      {voter.hasVoted ? "Vote Cast" : "Not Voted"}
-                    </Badge>
-                  </div>
+    <div className="flex">
+      <Sidebar items={voterMenuItems} userRole="voter" userName="Voter Account" onLogout={handleLogout} />
+      <div className="flex-1 md:ml-0">
+        <div className="min-h-screen bg-background">
+          {/* Header */}
+          <header className="border-b bg-card">
+            <div className="container mx-auto px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <User className="w-8 h-8 text-primary" />
+                  <h1 className="text-2xl font-bold text-foreground">Voter Dashboard</h1>
                 </div>
-              </CardContent>
-            </Card>
+                <Button onClick={handleLogout} variant="outline" size="sm">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Logout
+                </Button>
+              </div>
+            </div>
+          </header>
 
-            {/* Election Information */}
-            {electionData && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Election Information</CardTitle>
-                  <CardDescription>Details about your assigned election</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <h3 className="font-semibold text-lg mb-2">{electionData.name}</h3>
-                    <p className="text-muted-foreground">{electionData.description}</p>
+          <div className="container mx-auto px-6 py-8">
+            {error && (
+              <Alert className="bg-destructive/10 border-destructive/20 mb-6">
+                <AlertDescription className="text-destructive">{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {success && (
+              <Alert className="bg-green-500/10 border-green-500/20 mb-6">
+                <AlertDescription className="text-green-700">
+                  <div className="flex flex-col gap-2">
+                    <span>{success}</span>
+                    {transactionHash && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-muted-foreground">Transaction ID:</span>
+                        <code className="text-xs bg-muted px-2 py-1 rounded">
+                          {transactionHash.slice(0, 16)}...
+                        </code>
+                        <a 
+                          href={getEtherscanUrl()} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          View
+                        </a>
+                      </div>
+                    )}
                   </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-muted-foreground" />
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Left Column - Voter Info and Election Details */}
+              <div className="lg:col-span-2 space-y-6">
+                {/* Voter Information */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Voter Information</CardTitle>
+                    <CardDescription>Your voter profile details</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <p className="text-sm font-medium">Start</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(electionData.startTime).toLocaleString()}
+                        <p className="text-sm font-medium text-muted-foreground">Email</p>
+                        <p className="text-foreground">{voter.email}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Voter ID</p>
+                        <p className="text-foreground font-mono">{voter.voterId}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Wallet Address</p>
+                        <p className="text-foreground font-mono text-sm">
+                          {voter.walletAddress.slice(0, 8)}...{voter.walletAddress.slice(-6)}
                         </p>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-muted-foreground" />
                       <div>
-                        <p className="text-sm font-medium">End</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(electionData.endTime).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-muted-foreground" />
-                      <div>
-                        <p className="text-sm font-medium">Status</p>
-                        <Badge className={
-                          getElectionStatus() === "Active" ? "bg-green-100 text-green-800" :
-                          getElectionStatus() === "Upcoming" ? "bg-blue-100 text-blue-800" :
-                          "bg-gray-100 text-gray-800"
-                        }>
-                          {getElectionStatus()}
+                        <p className="text-sm font-medium text-muted-foreground">Voting Status</p>
+                        <Badge 
+                          className={voter.hasVoted ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}
+                        >
+                          {voter.hasVoted ? "Vote Cast" : "Not Voted"}
                         </Badge>
                       </div>
                     </div>
-                  </div>
+                  </CardContent>
+                </Card>
 
-                  {getElectionStatus() === "Active" && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-blue-600" />
-                        <p className="text-blue-800 font-medium">
-                          {getTimeRemaining()}
-                        </p>
+                {/* Election Information */}
+                {electionData && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Election Information</CardTitle>
+                      <CardDescription>Details about your assigned election</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <h3 className="font-semibold text-lg mb-2">{electionData.name}</h3>
+                        <p className="text-muted-foreground">{electionData.description}</p>
                       </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm font-medium">Start</p>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(electionData.startTime).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm font-medium">End</p>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(electionData.endTime).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm font-medium">Status</p>
+                            <Badge className={
+                              getElectionStatus() === "Active" ? "bg-green-100 text-green-800" :
+                              getElectionStatus() === "Upcoming" ? "bg-blue-100 text-blue-800" :
+                              "bg-gray-100 text-gray-800"
+                            }>
+                              {getElectionStatus()}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
 
-            {/* Voting Section */}
-            {electionData && electionData.candidates.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Cast Your Vote</CardTitle>
-                  <CardDescription>
-                    {voter.hasVoted 
-                      ? "You have already cast your vote in this election."
-                      : canVote()
-                        ? "Select your preferred candidate and cast your vote."
-                        : "Voting is not currently available."
-                    }
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {voter.hasVoted ? (
-                    <div className="text-center py-8">
-                      <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Vote className="w-8 h-8 text-green-600" />
-                      </div>
-                      <h3 className="text-lg font-semibold mb-2">Vote Cast Successfully</h3>
-                      <p className="text-muted-foreground">
-                        Thank you for participating in the election. Your vote has been recorded securely.
-                      </p>
-                      {transactionHash && (
-                        <div className="mt-4 p-3 bg-muted rounded-lg">
-                          <p className="text-sm font-medium">Transaction ID:</p>
-                          <code className="text-xs break-all">{transactionHash}</code>
+                      {getElectionStatus() === "Active" && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-4 h-4 text-blue-600" />
+                            <p className="text-blue-800 font-medium">
+                              {getTimeRemaining()}
+                            </p>
+                          </div>
                         </div>
                       )}
-                    </div>
-                  ) : canVote() ? (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {electionData.candidates.map((candidate) => (
-                          <div
-                            key={candidate.id}
-                            className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                              selectedCandidate === candidate.id
-                                ? "border-primary bg-primary/5"
-                                : "border-border hover:border-primary/50"
-                            }`}
-                            onClick={() => setSelectedCandidate(candidate.id)}
-                          >
-                            <div className="flex items-start gap-3">
-                              <div className="p-2 bg-primary/10 rounded-lg">
-                                <User className="w-5 h-5 text-primary" />
-                              </div>
-                              <div className="flex-1">
-                                <h4 className="font-semibold">{candidate.name}</h4>
-                                <p className="text-sm text-muted-foreground mb-2">
-                                  {candidate.position}
-                                </p>
-                                <div className="flex items-center gap-2">
-                                  <Shield className="w-4 h-4 text-muted-foreground" />
-                                  <span className="text-sm font-medium">
-                                    {candidate.party.name}
-                                  </span>
-                                  {candidate.party.symbol && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      {candidate.party.symbol}
-                                    </Badge>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Voting Section */}
+                {electionData && electionData.candidates.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Cast Your Vote</CardTitle>
+                      <CardDescription>
+                        {voter.hasVoted 
+                          ? "You have already cast your vote in this election."
+                          : canVote()
+                            ? "Select your preferred candidate and cast your vote."
+                            : "Voting is not currently available."
+                        }
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {voter.hasVoted ? (
+                        <div className="text-center py-8">
+                          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Vote className="w-8 h-8 text-green-600" />
+                          </div>
+                          <h3 className="text-lg font-semibold mb-2">Vote Cast Successfully</h3>
+                          <p className="text-muted-foreground">
+                            Thank you for participating in the election. Your vote has been recorded securely.
+                          </p>
+                          {transactionHash && (
+                            <div className="mt-4 p-3 bg-muted rounded-lg">
+                              <p className="text-sm font-medium">Transaction ID:</p>
+                              <code className="text-xs break-all">{transactionHash}</code>
+                            </div>
+                          )}
+                        </div>
+                      ) : canVote() ? (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {electionData.candidates.map((candidate) => (
+                              <div
+                                key={candidate.id}
+                                className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                                  selectedCandidate === candidate.id
+                                    ? "border-primary bg-primary/5"
+                                    : "border-border hover:border-primary/50"
+                                }`}
+                                onClick={() => setSelectedCandidate(candidate.id)}
+                              >
+                                <div className="flex items-start gap-3">
+                                  {/* Candidate Image */}
+                                  <div className="flex-shrink-0">
+                                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-primary/20 bg-muted">
+                                      {candidate.imageUrl ? (
+                                        <img 
+                                          src={testImageUrl(candidate.imageUrl)} 
+                                          alt={`${candidate.name} portrait`}
+                                          className="w-full h-full object-cover"
+                                          onError={(e) => {
+                                            console.log("Candidate image failed to load:", candidate.imageUrl);
+                                            const img = e.currentTarget;
+                                            img.style.display = 'none';
+                                            const parent = img.parentElement;
+                                            if (parent) {
+                                              // Check if fallback already exists
+                                              const existingFallback = parent.querySelector('.image-fallback');
+                                              if (existingFallback) return;
+                                              
+                                              const fallback = document.createElement('div');
+                                              fallback.className = 'image-fallback w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10';
+                                              fallback.innerHTML = `
+                                                <div class="text-center">
+                                                  <User class="w-8 h-8 mx-auto text-muted-foreground mb-1" />
+                                                  <span class="text-xs text-muted-foreground">No Photo</span>
+                                                </div>
+                                              `;
+                                              parent.appendChild(fallback);
+                                            }
+                                          }}
+                                          onLoad={() => console.log("Candidate image loaded successfully:", candidate.imageUrl)}
+                                        />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
+                                          <div className="text-center">
+                                            <User className="w-8 h-8 mx-auto text-muted-foreground mb-1" />
+                                            <span className="text-xs text-muted-foreground">No Photo</span>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex-1 min-w-0">
+                                    <h4 className="font-semibold truncate">{candidate.name}</h4>
+                                    <p className="text-sm text-muted-foreground mb-2">
+                                      {candidate.position}
+                                    </p>
+                                    <div className="flex items-center gap-2">
+                                      {/* Party Icon */}
+                                      <div className="w-5 h-5 rounded-full overflow-hidden border border-border bg-white flex-shrink-0">
+                                        {candidate.party.iconUrl ? (
+                                          <img 
+                                            src={testImageUrl(candidate.party.iconUrl)} 
+                                            alt={`${candidate.party.name} icon`}
+                                            className="w-full h-full object-cover"
+                                            onError={(e) => {
+                                              console.log("Party icon failed to load:", candidate.party.iconUrl);
+                                              const img = e.currentTarget;
+                                              img.style.display = 'none';
+                                              const parent = img.parentElement;
+                                              if (parent) {
+                                                // Check if fallback already exists
+                                                const existingFallback = parent.querySelector('.icon-fallback');
+                                                if (existingFallback) return;
+                                                
+                                                const fallback = document.createElement('div');
+                                                fallback.className = 'icon-fallback w-full h-full flex items-center justify-center bg-muted';
+                                                fallback.innerHTML = `<Shield class="w-3 h-3 text-muted-foreground" />`;
+                                                parent.appendChild(fallback);
+                                              }
+                                            }}
+                                            onLoad={() => console.log("Party icon loaded successfully:", candidate.party.iconUrl)}
+                                          />
+                                        ) : (
+                                          <div className="w-full h-full flex items-center justify-center bg-muted">
+                                            <Shield className="w-3 h-3 text-muted-foreground" />
+                                          </div>
+                                        )}
+                                      </div>
+                                      
+                                      <span className="text-sm font-medium truncate">
+                                        {candidate.party.name}
+                                      </span>
+                                      
+                                      {candidate.party.symbol && (
+                                        <Badge variant="secondary" className="text-xs flex-shrink-0">
+                                          {candidate.party.symbol}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                  
+                                  {selectedCandidate === candidate.id && (
+                                    <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                                      <CheckCircle2 className="w-4 h-4 text-white" />
+                                    </div>
                                   )}
                                 </div>
                               </div>
-                              {selectedCandidate === candidate.id && (
-                                <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-                                  <div className="w-3 h-3 rounded-full bg-white"></div>
-                                </div>
-                              )}
-                            </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
 
-                      <Button
-                        onClick={handleVoteClick}
-                        disabled={!selectedCandidate || isVoting}
-                        className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-                        size="lg"
-                      >
-                        {isVoting ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            {isConfirming ? "Confirming..." : "Processing Vote..."}
-                          </>
-                        ) : (
-                          <>
-                            <Vote className="w-4 h-4 mr-2" />
-                            Cast Vote
-                          </>
-                        )}
-                      </Button>
+                          <Button
+                            onClick={handleVoteClick}
+                            disabled={!selectedCandidate || isVoting}
+                            className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                            size="lg"
+                          >
+                            {isVoting ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                {isConfirming ? "Confirming..." : "Processing Vote..."}
+                              </>
+                            ) : (
+                              <>
+                                <Vote className="w-4 h-4 mr-2" />
+                                Cast Vote
+                              </>
+                            )}
+                          </Button>
 
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <h4 className="font-semibold text-blue-800 mb-2">Secure Voting Process</h4>
-                        <p className="text-blue-700 text-sm">
-                          When you click "Cast Vote", you'll be asked to:
-                        </p>
-                        <ol className="text-blue-700 text-sm list-decimal list-inside mt-2 space-y-1">
-                          <li>Confirm your vote details in a secure popup</li>
-                          <li>Connect your MetaMask wallet for verification</li>
-                          <li>Your vote will be recorded securely</li>
-                        </ol>
-                      </div>
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <h4 className="font-semibold text-blue-800 mb-2">Secure Voting Process</h4>
+                            <p className="text-blue-700 text-sm">
+                              When you click "Cast Vote", you'll be asked to:
+                            </p>
+                            <ol className="text-blue-700 text-sm list-decimal list-inside mt-2 space-y-1">
+                              <li>Confirm your vote details in a secure popup</li>
+                              <li>Connect your MetaMask wallet for verification</li>
+                              <li>Your vote will be recorded securely</li>
+                            </ol>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Clock className="w-8 h-8 text-gray-400" />
+                          </div>
+                          <h3 className="text-lg font-semibold mb-2">Voting Not Available</h3>
+                          <p className="text-muted-foreground">
+                            {getElectionStatus() === "Upcoming" 
+                              ? "Voting will begin when the election starts."
+                              : getElectionStatus() === "Completed"
+                              ? "This election has ended."
+                              : "Voting is not currently available for this election."
+                            }
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+
+              {/* Right Column - Quick Stats and Help */}
+              <div className="space-y-6">
+                {/* Voting Status Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Voting Status</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Your Status</span>
+                      <Badge className={
+                        voter.hasVoted 
+                          ? "bg-green-100 text-green-800" 
+                          : "bg-yellow-100 text-yellow-800"
+                      }>
+                        {voter.hasVoted ? "Voted" : "Not Voted"}
+                      </Badge>
                     </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Clock className="w-8 h-8 text-gray-400" />
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Election Status</span>
+                      <Badge className={
+                        getElectionStatus() === "Active" ? "bg-green-100 text-green-800" :
+                        getElectionStatus() === "Upcoming" ? "bg-blue-100 text-blue-800" :
+                        "bg-gray-100 text-gray-800"
+                      }>
+                        {getElectionStatus()}
+                      </Badge>
+                    </div>
+                    {getTimeRemaining() && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Time Remaining</span>
+                        <span className="text-sm text-muted-foreground">
+                          {getTimeRemaining()}
+                        </span>
                       </div>
-                      <h3 className="text-lg font-semibold mb-2">Voting Not Available</h3>
-                      <p className="text-muted-foreground">
-                        {getElectionStatus() === "Upcoming" 
-                          ? "Voting will begin when the election starts."
-                          : getElectionStatus() === "Completed"
-                          ? "This election has ended."
-                          : "Voting is not currently available for this election."
-                        }
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Help Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Need Help?</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="text-sm text-muted-foreground">
+                      <p>If you encounter any issues while voting, please contact support:</p>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm">
+                        <strong>Email:</strong> support@voting.com
+                      </p>
+                      <p className="text-sm">
+                        <strong>Phone:</strong> 1-800-VOTE-NOW
                       </p>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+                    <Button variant="outline" className="w-full" size="sm">
+                      Contact Support
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* Security Info */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Security</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <span className="text-sm">End-to-end encrypted</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <span className="text-sm">Wallet verification</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <span className="text-sm">Secure voting</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           </div>
 
-          {/* Right Column - Quick Stats and Help */}
-          <div className="space-y-6">
-            {/* Voting Status Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Voting Status</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Your Status</span>
-                  <Badge className={
-                    voter.hasVoted 
-                      ? "bg-green-100 text-green-800" 
-                      : "bg-yellow-100 text-yellow-800"
-                  }>
-                    {voter.hasVoted ? "Voted" : "Not Voted"}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Election Status</span>
-                  <Badge className={
-                    getElectionStatus() === "Active" ? "bg-green-100 text-green-800" :
-                    getElectionStatus() === "Upcoming" ? "bg-blue-100 text-blue-800" :
-                    "bg-gray-100 text-gray-800"
-                  }>
-                    {getElectionStatus()}
-                  </Badge>
-                </div>
-                {getTimeRemaining() && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Time Remaining</span>
-                    <span className="text-sm text-muted-foreground">
-                      {getTimeRemaining()}
-                    </span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Help Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Need Help?</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="text-sm text-muted-foreground">
-                  <p>If you encounter any issues while voting, please contact support:</p>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm">
-                    <strong>Email:</strong> support@voting.com
-                  </p>
-                  <p className="text-sm">
-                    <strong>Phone:</strong> 1-800-VOTE-NOW
-                  </p>
-                </div>
-                <Button variant="outline" className="w-full" size="sm">
-                  Contact Support
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Security Info */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Security</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="text-sm">End-to-end encrypted</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="text-sm">Wallet verification</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="text-sm">Secure voting</span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          {/* Vote Confirmation Dialog */}
+          <VoteConfirmationDialog
+            isOpen={showConfirmation}
+            onClose={() => setShowConfirmation(false)}
+            onConfirm={handleConfirmVote}
+            voter={voter}
+            candidate={getSelectedCandidate()}
+            election={voter?.election}
+            isLoading={isConfirming}
+          />
         </div>
       </div>
-
-      {/* Vote Confirmation Dialog */}
-      <VoteConfirmationDialog
-        isOpen={showConfirmation}
-        onClose={() => setShowConfirmation(false)}
-        onConfirm={handleConfirmVote}
-        voter={voter}
-        candidate={getSelectedCandidate()}
-        election={voter?.election}
-        isLoading={isConfirming}
-      />
     </div>
-          </div>
-        </div>
-   
   )
 }
+
 async function sendVoteTransaction(voterId: string, candidateId: string, electionId: string): Promise<string> {
   try {
     // Get the user's wallet from MetaMask

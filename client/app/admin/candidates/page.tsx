@@ -7,12 +7,13 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { User, Search, Plus, Shield } from "lucide-react"
+import { User, Search, Plus, Shield, ImageOff } from "lucide-react"
 
 interface Candidate {
   id: string
   name: string
   position: string
+  imageUrl: string
   party: {
     id: string
     name: string
@@ -104,37 +105,80 @@ export default function ManageCandidatesPage() {
             </Alert>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="space-y-4">
             {filteredCandidates.map((candidate) => (
               <Card key={candidate.id} className="p-4 hover:shadow-md transition-shadow">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-primary/10 rounded-lg">
-                    <User className="w-5 h-5 text-primary" />
+                <div className="flex items-center gap-4">
+                  {/* Candidate Image */}
+                  <div className="flex-shrink-0">
+                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-primary/20 bg-muted">
+                      {candidate.imageUrl ? (
+                        <img 
+                          src={candidate.imageUrl} 
+                          alt={`${candidate.name} portrait`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            const parent = e.currentTarget.parentElement;
+                            if (parent) {
+                              const fallback = document.createElement('div');
+                              fallback.className = 'w-full h-full flex items-center justify-center bg-muted';
+                              fallback.innerHTML = `
+                                <div class="text-center">
+                                  <ImageOff class="w-6 h-6 mx-auto text-muted-foreground" />
+                                </div>
+                              `;
+                              parent.appendChild(fallback);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <User className="w-8 h-8 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  
+                  {/* Candidate Details */}
                   <div className="flex-1">
-                    <h3 className="font-semibold text-lg mb-1">{candidate.name}</h3>
-                    <Badge variant="secondary" className="mb-2">
-                      {candidate.position}
-                    </Badge>
+                    <div className="flex items-center gap-3 mb-1">
+                      <h3 className="font-semibold text-lg">{candidate.name}</h3>
+                      <Badge variant="secondary">{candidate.position}</Badge>
+                    </div>
+                    
                     <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                       <Shield className="w-4 h-4" />
-                      {candidate.party.name}
+                      <span className="font-medium">{candidate.party.name}</span>
+                      {candidate.party.symbol && (
+                        <span className="text-xs px-1.5 py-0.5 bg-muted rounded">
+                          {candidate.party.symbol}
+                        </span>
+                      )}
                     </div>
+                    
                     <p className="text-xs text-muted-foreground">
-                      {candidate.party.election.name}
+                      Election: {candidate.party.election.name}
                     </p>
                   </div>
-                </div>
-                
-                <div className="flex gap-2 mt-4">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="flex-1"
-                    onClick={() => router.push(`/admin/candidates/${candidate.id}`)}
-                  >
-                    Edit
-                  </Button>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => router.push(`/admin/candidates/${candidate.id}`)}
+                    >
+                      View
+                    </Button>
+                    <Button 
+                      variant="default" 
+                      size="sm"
+                      onClick={() => router.push(`/admin/candidates/edit/${candidate.id}`)}
+                    >
+                      Edit
+                    </Button>
+                  </div>
                 </div>
               </Card>
             ))}

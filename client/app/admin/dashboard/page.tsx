@@ -2,12 +2,10 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import Sidebar from "@/components/sidebar"
-
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Users,Landmark,UserCheck, BarChart3,TrendingUp, CheckCircle, Plus, UserPlus, Users2, PieChart, LogOut, User, Wallet } from "lucide-react"
- 
+import { Users, Landmark, BarChart3, CheckCircle, Plus, UserPlus, Users2, PieChart, LogOut, Wallet } from "lucide-react"
+
 interface DashboardStats {
   activeElections: number
   totalVoters: number
@@ -21,47 +19,9 @@ interface DashboardStats {
   }>
 }
 
-const adminMenuItems = [
-  {
-    label: "Dashboard",
-    href: "/admin/dashboard",
-    icon: <BarChart3 className="w-5 h-5" />,
-  },
-  {
-    label: "Elections",
-    href: "/admin/elections",
-    icon: <Landmark className="w-5 h-5" />,
-    children: [
-      { label: "Create Election", href: "/admin/create-election", icon: null },
-      { label: "View Elections", href: "/admin/elections", icon: null },
-    ],
-  },
-  {
-    label: "Parties & Candidates",
-    href: "/admin/parties",
-    icon: <Users className="w-5 h-5" />,
-    children: [
-      { label: "Manage Parties", href: "/admin/parties", icon: null },
-      { label: "Manage Candidates", href: "/admin/candidates", icon: null },
-    ],
-  },
-  {
-    label: "Voter Registry",
-    href: "/voter/register",
-    icon: <UserCheck className="w-5 h-5" />,
-  },
-  {
-    label: "Vote Results",
-    href: "/admin/results",
-    icon: <TrendingUp className="w-5 h-5" />,
-  },
-]
-
 declare global {
   interface Window {
-    ethereum?: {
-      request: (args: { method: string; params?: any[] }) => Promise<any>;
-    };
+    ethereum?: any;
   }
 }
 
@@ -77,7 +37,6 @@ export default function AdminDashboard() {
     checkWalletConnection()
     fetchStats()
   }, [])
-  
 
   const checkWalletConnection = async () => {
     if (typeof window.ethereum !== 'undefined') {
@@ -123,13 +82,6 @@ export default function AdminDashboard() {
   const disconnectWallet = () => {
     setWalletAddress("")
     setIsConnected(false)
-    // You might want to call your backend logout API here
-    // await fetch("/api/auth/logout", { method: "POST" })
-  }
-
-  const handleLogout = () => {
-    disconnectWallet()
-    router.push("/admin/login")
   }
 
   const fetchStats = async () => {
@@ -191,10 +143,7 @@ export default function AdminDashboard() {
   ]
 
   return (
-      <div className="flex">
-          <Sidebar items={adminMenuItems} userRole="admin" userName="Admin Account" onLogout={handleLogout} />
-          <div className="flex-1 md:ml-0">
-              <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-6 py-4">
@@ -210,18 +159,9 @@ export default function AdminDashboard() {
                   <div className="flex items-center gap-2 bg-secondary px-3 py-2 rounded-lg">
                     <Wallet className="w-4 h-4 text-green-500" />
                     <span className="text-sm font-medium text-foreground">
-                      connected:{formatWalletAddress(walletAddress)}
+                      connected: {formatWalletAddress(walletAddress)}
                     </span>
                   </div>
-                  <Button
-                    onClick={handleLogout}
-                    variant="outline"
-                    size="sm"
-                    className="flex items-center gap-2"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    Logout
-                  </Button>
                 </div>
               ) : (
                 <Button
@@ -229,7 +169,7 @@ export default function AdminDashboard() {
                   disabled={isConnecting}
                   className="flex items-center gap-2"
                 >
-                  <User className="w-4 h-4" />
+                  <Wallet className="w-4 h-4" />
                   {isConnecting ? "Connecting..." : "Connect Wallet"}
                 </Button>
               )}
@@ -345,8 +285,5 @@ export default function AdminDashboard() {
         </div>
       </main>
     </div>
-          </div>
-        </div>
-  
   )
 }

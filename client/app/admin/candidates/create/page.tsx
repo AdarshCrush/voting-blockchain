@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { User } from "lucide-react"
+import { User, Upload, X } from "lucide-react"
 
 interface Party {
   id: string
@@ -25,13 +24,18 @@ export default function CreateCandidatePage() {
   const [formData, setFormData] = useState({
     name: "",
     position: "",
-    partyId: ""
+    partyId: "",
+    imageUrl: ""
   })
+  const [previewUrl, setPreviewUrl] = useState("")
+  const [file, setFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
   const [parties, setParties] = useState<Party[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [partiesLoading, setPartiesLoading] = useState(true)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -48,6 +52,63 @@ export default function CreateCandidatePage() {
       setError("Failed to load parties")
     } finally {
       setPartiesLoading(false)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0]
+    if (!selectedFile) return
+
+    if (!selectedFile.type.startsWith('image/')) {
+      setError("Please select an image file")
+      return
+    }
+
+    if (selectedFile.size > 5 * 1024 * 1024) {
+      setError("File size should be less than 5MB")
+      return
+    }
+
+    setFile(selectedFile)
+    setPreviewUrl(URL.createObjectURL(selectedFile))
+    setError("")
+  }
+
+  const removeImage = () => {
+    setFile(null)
+    setPreviewUrl("")
+    setFormData(prev => ({ ...prev, imageUrl: "" }))
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
+  const uploadImage = async () => {
+    if (!file) return ""
+
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("type", "candidate")
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Upload failed")
+      }
+
+      return result.url
+    } catch (err) {
+      setError("Failed to upload image")
+      return ""
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -78,10 +139,19 @@ export default function CreateCandidatePage() {
     setIsLoading(true)
 
     try {
+      // Upload image if exists
+      let imageUrl = formData.imageUrl
+      if (file) {
+        const uploadedUrl = await uploadImage()
+        if (uploadedUrl) {
+          imageUrl = uploadedUrl
+        }
+      }
+
       const response = await fetch("/api/admin/candidates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, imageUrl }),
       })
 
       const result = await response.json()
@@ -144,6 +214,57 @@ export default function CreateCandidatePage() {
             </div>
 
             <div className="space-y-2">
+              <Label>Passport Photo</Label>
+              <div className="space-y-4">
+                <div 
+                  className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${previewUrl ? 'border-primary/50' : 'border-muted-foreground/25 hover:border-primary/50'}`}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                  
+                  {previewUrl ? (
+                    <div className="relative inline-block">
+                      <img 
+                        src={previewUrl} 
+                        alt="Preview" 
+                        className="w-48 h-48 rounded-lg object-cover mx-auto"
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          removeImage()
+                        }}
+                        className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                      <p className="text-sm text-muted-foreground">
+                        Click to upload passport photo
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Recommended: 400x400px, max 5MB
+                      </p>
+                    </>
+                  )}
+                </div>
+                {uploading && (
+                  <p className="text-sm text-muted-foreground">Uploading image...</p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="party">Select Party *</Label>
               <Select value={formData.partyId} onValueChange={handleSelectChange}>
                 <SelectTrigger>
@@ -180,7 +301,7 @@ export default function CreateCandidatePage() {
               <Button
                 type="submit"
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
-                disabled={isLoading || partiesLoading}
+                disabled={isLoading || partiesLoading || uploading}
               >
                 {isLoading ? "Creating..." : "Register Candidate"}
               </Button>

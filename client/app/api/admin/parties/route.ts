@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
 
     const adminData = JSON.parse(adminSession)
     
-    const { name, symbol, electionId } = await req.json()
+    const { name, symbol, electionId, iconUrl } = await req.json()
 
     if (!name || !electionId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -45,11 +45,12 @@ export async function POST(req: NextRequest) {
       }, { status: 409 })
     }
 
-    // Create party
+    // Create party with iconUrl
     const party = await prisma.party.create({
       data: {
         name,
         symbol,
+        iconUrl,  // Include iconUrl from request body
         electionId
       },
       include: {

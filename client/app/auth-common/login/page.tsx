@@ -216,7 +216,7 @@ export default function AdminLoginPage() {
           <div className="mt-6 text-center space-y-2">
             <p className="text-sm text-muted-foreground">
               Don&apos;t have an account?{" "}
-              <Link href="/admin/register" className="text-primary hover:underline">
+              <Link href="/auth-common/register" className="text-primary hover:underline">
                 Register here
               </Link>
             </p>

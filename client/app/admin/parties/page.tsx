@@ -6,12 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Users, Search, Plus, User, Shield } from "lucide-react"
+import { Users, Search, Plus, User, Shield, ImageOff } from "lucide-react"
 
 interface Party {
   id: string
   name: string
   symbol: string
+  iconUrl: string  // Add this field
   election: {
     name: string
   }
@@ -112,21 +113,56 @@ export default function ManagePartiesPage() {
               <Card key={party.id} className="p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4 flex-1">
-                    <div className="p-3 bg-primary/10 rounded-lg">
-                      <Shield className="w-6 h-6 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="font-semibold text-lg">{party.name}</h3>
-                        {party.symbol && (
-                          <span className="px-2 py-1 bg-muted rounded text-sm">
-                            {party.symbol}
-                          </span>
+                    {/* Party Icon Display */}
+                    <div className="relative">
+                      <div className="w-16 h-16 rounded-lg overflow-hidden border border-border bg-muted flex items-center justify-center">
+                        {party.iconUrl ? (
+                          <img 
+                            src={party.iconUrl} 
+                            alt={`${party.name} icon`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // If image fails to load, show fallback
+                              e.currentTarget.style.display = 'none';
+                              const parent = e.currentTarget.parentElement;
+                              if (parent) {
+                                const fallback = document.createElement('div');
+                                fallback.className = 'w-full h-full flex items-center justify-center bg-muted';
+                                fallback.innerHTML = `
+                                  <div class="text-center">
+                                    <ImageOff class="w-6 h-6 mx-auto text-muted-foreground mb-1" />
+                                    <span class="text-xs text-muted-foreground">No Icon</span>
+                                  </div>
+                                `;
+                                parent.appendChild(fallback);
+                              }
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <div className="text-center">
+                              <Shield className="w-6 h-6 mx-auto text-muted-foreground mb-1" />
+                              <span className="text-xs text-muted-foreground">No Icon</span>
+                            </div>
+                          </div>
                         )}
                       </div>
-                      <p className="text-muted-foreground mb-3">
-                        Election: {party.election.name}
-                      </p>
+                      
+                      {/* Party Symbol Badge */}
+                      {party.symbol && (
+                        <div className="absolute -bottom-2 -right-2 bg-primary text-primary-foreground text-xs font-medium px-2 py-1 rounded-md shadow-sm">
+                          {party.symbol}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex-1">
+                      <div className="mb-2">
+                        <h3 className="font-semibold text-lg">{party.name}</h3>
+                        <p className="text-muted-foreground text-sm">
+                          Election: {party.election.name}
+                        </p>
+                      </div>
                       
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 text-sm">
@@ -157,6 +193,15 @@ export default function ManagePartiesPage() {
                       onClick={() => router.push(`/admin/parties/${party.id}/candidates`)}
                     >
                       Manage Candidates
+                    </Button>
+                    
+                    {/* Edit Party Button */}
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => router.push(`/admin/parties/edit/${party.id}`)}
+                    >
+                      Edit
                     </Button>
                   </div>
                 </div>

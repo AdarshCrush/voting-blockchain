@@ -64,7 +64,7 @@ export default function LandingPage() {
         {/* Login Buttons */}
         <div className="flex justify-center gap-6 mb-16">
           <Button
-            onClick={() => router.push("/admin/login")}
+            onClick={() => router.push("/auth-common/login")}
             size="lg"
             className="bg-primary text-primary-foreground hover:bg-primary/90 px-8"
           >

@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Voter not found" }, { status: 404 })
     }
 
-    // Get election data with candidates and parties
+    // Get election data with candidates and parties INCLUDING image fields
     const electionData = await prisma.election.findUnique({
       where: { id: voter.electionId },
       include: {
@@ -46,11 +46,13 @@ export async function GET(req: NextRequest) {
                 id: true,
                 name: true,
                 position: true,
+                imageUrl: true, // Add this field
                 party: {
                   select: {
                     id: true,
                     name: true,
-                    symbol: true
+                    symbol: true,
+                    iconUrl: true // Add this field
                   }
                 }
               }
@@ -71,7 +73,8 @@ export async function GET(req: NextRequest) {
         party: {
           id: party.id,
           name: party.name,
-          symbol: party.symbol
+          symbol: party.symbol,
+          iconUrl: party.iconUrl // Include iconUrl from party
         }
       }))
     )

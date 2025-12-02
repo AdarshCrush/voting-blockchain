@@ -13,13 +13,13 @@ export async function POST(req: NextRequest) {
 
     const adminData = JSON.parse(adminSession)
     
-    const { name, position, partyId } = await req.json()
+    const { name, position, partyId, imageUrl } = await req.json()
 
     if (!name || !position || !partyId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    // Verify party exists and belongs to admin's election
+    // Verify party exists and belongs to admin
     const party = await prisma.party.findFirst({
       where: {
         id: partyId,
@@ -33,30 +33,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Party not found" }, { status: 404 })
     }
 
-    // Check if candidate with same name already exists in this party
-    const existingCandidate = await prisma.candidate.findFirst({
-      where: {
-        name,
-        partyId
-      }
-    })
-
-    if (existingCandidate) {
-      return NextResponse.json({ 
-        error: "A candidate with this name already exists in the selected party" 
-      }, { status: 409 })
-    }
-
-    // Create candidate
+    // Create candidate with imageUrl
     const candidate = await prisma.candidate.create({
       data: {
         name,
         position,
+        imageUrl,  // Include imageUrl from request body
         partyId
       },
       include: {
         party: {
-          include: {
+          select: {
+            name: true,
             election: {
               select: {
                 name: true
@@ -98,7 +86,8 @@ export async function GET(req: NextRequest) {
       },
       include: {
         party: {
-          include: {
+          select: {
+            name: true,
             election: {
               select: {
                 name: true
